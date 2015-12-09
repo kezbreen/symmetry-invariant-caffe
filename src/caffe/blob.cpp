@@ -176,6 +176,69 @@ void Blob<Dtype>::Update() {
   }
 }
 
+template <typename Dtype>
+inline void orthoganalize_row(Dtype* row, const int N) {
+  Dtype accum = 0;
+  for (int i = 0; i < N; ++i) {
+    accum += row[i] * row[i];
+  }
+  accum = sqrt(accum);
+  for (int i = 0; i < N; ++i) {
+    row[i] /= accum;
+  }
+}
+
+template <> void Blob<unsigned int>::Orthoganalize() { NOT_IMPLEMENTED; }
+template <> void Blob<int>::Orthoganalize() { NOT_IMPLEMENTED; }
+
+template <typename Dtype>
+void Blob<Dtype>::Orthoganalize() {
+  // We will perform Orthoganalize based on where the data is located.
+  switch (data_->head()) {
+  case SyncedMemory::HEAD_AT_CPU:
+    // perform computation on CPU
+    if (data_->num_axes() == 1) {
+      orthoganalise_row(static_cast<Dtype*>(data_->mutable_cpu_data()),
+          data_->count());
+    }
+    else {
+      const int outer_count = data_->shape(0);
+      const int inner_count = data_->count(1);
+      for (int i = 0; i < outer_count; ++i) {
+        orthoganalise_row(
+            &(static_cast<Dtype*>(data_->mutable_cpu_data())[i]),
+            inner_count);
+      }
+    }
+    break;
+  case SyncedMemory::HEAD_AT_GPU:
+  case SyncedMemory::SYNCED:
+#ifndef CPU_ONLY
+    // perform computation on GPU
+    if (data_->num_axes() == 1) {
+      orthoganalise_row(static_cast<Dtype*>(data_->mutable_gpu_data()),
+          data_->count());
+    }
+    else if (data_->num_axes() > 1) {
+      const int outer_count = data_->shape(0);
+      const int inner_count = data_->count(1);
+      for (int i = 0; i < outer_count; ++i) {
+        orthoganalise_row(
+            &(static_cast<Dtype*>(data_->mutable_gpu_data())[i]),
+            inner_count);
+      }
+    }
+    else
+      LOG(FATAL) << "Blob has no dimensions.";
+#else
+    NO_GPU;
+#endif
+    break;
+  default:
+    LOG(FATAL) << "Syncedmem not initialized.";
+  }
+}
+
 template <> unsigned int Blob<unsigned int>::asum_data() const {
   NOT_IMPLEMENTED;
   return 0;

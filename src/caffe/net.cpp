@@ -987,6 +987,13 @@ void Net<Dtype>::Update() {
 }
 
 template <typename Dtype>
+void Net<Dtype>::Orthoganalize() {
+  for (int i = 0; i < learnable_params_.size(); ++i) {
+    learnable_params_[i]->Orthoganalize();
+  }
+}
+
+template <typename Dtype>
 void Net<Dtype>::ClearParamDiffs() {
   for (int i = 0; i < learnable_params_.size(); ++i) {
     Blob<Dtype>* blob = learnable_params_[i];

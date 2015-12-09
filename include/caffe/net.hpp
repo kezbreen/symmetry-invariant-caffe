@@ -91,6 +91,9 @@ class Net {
 
   /// @brief Updates the network weights based on the diff values computed.
   void Update();
+
+  /// @brief Scales the network weight rows to unit norm
+  void Orthoganalize();
   /**
    * @brief Shares weight data of owner blobs with shared blobs.
    *

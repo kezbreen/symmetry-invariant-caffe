@@ -109,10 +109,12 @@ void SGDSolver<Dtype>::ApplyUpdate() {
   for (int param_id = 0; param_id < this->net_->learnable_params().size();
        ++param_id) {
     Normalize(param_id);
+    ProjectGradients(param_id);
     Regularize(param_id);
     ComputeUpdateValue(param_id, rate);
   }
   this->net_->Update();
+  this->net_->Orthoganalise();
 }
 
 template <typename Dtype>
@@ -138,6 +140,62 @@ void SGDSolver<Dtype>::Normalize(int param_id) {
   }
   default:
     LOG(FATAL) << "Unknown caffe mode: " << Caffe::mode();
+  }
+}
+
+template <typename Dtype>
+void ProjectGradients(int param_id) {
+  Blob<Dtype>* W = net_params[param_id];
+  const Dtype* W_data = NULL;
+  Dtype* Z_data = NULL;
+  switch (Caffe::mode()) {
+  case Caffe::CPU: {
+    W_data = W->cpu_data();
+    Z_data = W->mutable_cpu_diff();
+    break;
+  }
+  case Caffe::GPU: {
+#ifndef CPU_ONLY
+    W_data = W->gpu_data();
+    Z_data = W->mutable_gpu_diff();
+#else
+    NO_GPU;
+#endif
+    break;
+  }
+  default:
+    LOG(FATAL) << "Unknown caffe mode: " << Caffe::mode();
+  }
+
+  if (W->num_axes() > 1) {
+    // this should work with mutable Z
+    const int outer_count = W->shape(0);
+    const int inner_count = W->count(1);
+    for (int k = 0; k < outer_count; ++k) {
+      Dtype diag_ZWt_k = 0;
+      const Dtype* W_data_feature = &W_data[W->offset(k)];
+      Dtype* Z_data_feature = &Z_data[W->offset(k)];
+      for (int i = 0; i < inner_count; ++i) {
+        // diag(Z * W^t)
+        diag_ZWt_k += Z_data_feature[i] * W_data_feature[i];
+      }
+      for (int i = 0; i < inner_count; ++i) {
+        // Z - diag_matrix(diag(Z * W^t)) * W
+        Z_data_feature[i] -= W_data_feature[i] * diag_ZWt_k;
+      }
+    }
+  }
+  else if (W->num_axes() == 1) {
+    // bias vector so same as one row of W and Z: w, z
+    // z - dot(w, z) * w
+    Dtype w_dot_z = 0;
+    for (int i = 0; i < W->shape(0); ++i) {
+      w_dot_z += W_data[i] * Z_data[i];
+    }
+    caffe_cpu_axpy(W->count(), -w_dot_z, W_data, Z_data);
+  }
+  else {
+    LOG(FATAL) << "Blob has no dimensions.";
   }
 }
 
