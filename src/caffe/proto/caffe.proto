@@ -98,7 +98,7 @@ message NetParameter {
 // NOTE
 // Update the next available ID when you add a new SolverParameter field.
 //
-// SolverParameter next available ID: 41 (last added: type)
+// SolverParameter next available ID: 42 (last added: symmetry_invariant_updates)
 message SolverParameter {
   //////////////////////////////////////////////////////////////////////////////
   // Specifying the train and test networks
@@ -239,6 +239,9 @@ message SolverParameter {
   }
   // DEPRECATED: use type instead of solver_type
   optional SolverType solver_type = 30 [default = SGD];
+
+  // If true, SGD-based solvers will use a modified update rule
+  optional bool symmetry_invariant_updates = 41 [default = false];
 }
 
 // A message that stores the solver snapshots

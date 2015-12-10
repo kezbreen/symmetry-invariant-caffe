@@ -109,12 +109,16 @@ void SGDSolver<Dtype>::ApplyUpdate() {
   for (int param_id = 0; param_id < this->net_->learnable_params().size();
        ++param_id) {
     Normalize(param_id);
-    ProjectGradients(param_id);
+    if (this->param_.symmetry_invariant_updates()) {
+      ProjectGradients(param_id);
+    }
     Regularize(param_id);
     ComputeUpdateValue(param_id, rate);
   }
   this->net_->Update();
-  this->net_->Orthoganalise();
+  if (this->param_.symmetry_invariant_updates()) {
+    this->net_->Orthoganalize();
+  }
 }
 
 template <typename Dtype>
@@ -144,28 +148,30 @@ void SGDSolver<Dtype>::Normalize(int param_id) {
 }
 
 template <typename Dtype>
-void ProjectGradients(int param_id) {
-  Blob<Dtype>* W = net_params[param_id];
-  const Dtype* W_data = NULL;
-  Dtype* Z_data = NULL;
-  switch (Caffe::mode()) {
-  case Caffe::CPU: {
-    W_data = W->cpu_data();
-    Z_data = W->mutable_cpu_diff();
-    break;
-  }
-  case Caffe::GPU: {
-#ifndef CPU_ONLY
-    W_data = W->gpu_data();
-    Z_data = W->mutable_gpu_diff();
-#else
-    NO_GPU;
-#endif
-    break;
-  }
-  default:
-    LOG(FATAL) << "Unknown caffe mode: " << Caffe::mode();
-  }
+void SGDSolver<Dtype>::ProjectGradients(int param_id) {
+  Blob<Dtype>* W = this->net_->learnable_params()[param_id];
+  const Dtype* W_data = W->cpu_data();
+  Dtype* Z_data = W->mutable_cpu_diff();
+//   const Dtype* W_data = NULL;
+//   Dtype* Z_data = NULL;
+//   switch (Caffe::mode()) {
+//   case Caffe::CPU: {
+//     W_data = W->cpu_data();
+//     Z_data = W->mutable_cpu_diff();
+//     break;
+//   }
+//   case Caffe::GPU: {
+// #ifndef CPU_ONLY
+//     W_data = W->gpu_data();
+//     Z_data = W->mutable_gpu_diff();
+// #else
+//     NO_GPU;
+// #endif
+//     break;
+//   }
+//   default:
+//     LOG(FATAL) << "Unknown caffe mode: " << Caffe::mode();
+//   }
 
   if (W->num_axes() > 1) {
     // this should work with mutable Z
@@ -188,11 +194,26 @@ void ProjectGradients(int param_id) {
   else if (W->num_axes() == 1) {
     // bias vector so same as one row of W and Z: w, z
     // z - dot(w, z) * w
-    Dtype w_dot_z = 0;
-    for (int i = 0; i < W->shape(0); ++i) {
-      w_dot_z += W_data[i] * Z_data[i];
-    }
-    caffe_cpu_axpy(W->count(), -w_dot_z, W_data, Z_data);
+//     switch (Caffe::mode()) {
+//     case Caffe::CPU: {
+      Dtype w_dot_z = 0;
+      for (int i = 0; i < W->shape(0); ++i) {
+        w_dot_z += W_data[i] * Z_data[i];
+      }
+      caffe_axpy(W->count(), -w_dot_z, W_data, Z_data);
+//       break;
+//     }
+//     case Caffe::GPU: {
+//   #ifndef CPU_ONLY
+//       caffe_gpu_axpy(W->count(), -w_dot_z, W_data, Z_data);
+//   #else
+//       NO_GPU;
+//   #endif
+//       break;
+//     }
+//     default:
+//       LOG(FATAL) << "Unknown caffe mode: " << Caffe::mode();
+//     }
   }
   else {
     LOG(FATAL) << "Blob has no dimensions.";
